@@ -1,49 +1,103 @@
-const { db } = require('../database');
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-class User {
-  static create(userData) {
-    const { username, email, password, role = 'user' } = userData;
-    const hashedPassword = bcrypt.hashSync(password, 12);
-    
-    const stmt = db.prepare(`
-      INSERT INTO users (username, email, password, role, created_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
-    `);
-    
-    const result = stmt.run(username, email, hashedPassword, role);
-    return this.findById(result.lastInsertRowid);
+const userSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: [true, 'Kullanıcı adı gerekli'],
+    unique: true,
+    trim: true,
+    minlength: [3, 'Kullanıcı adı en az 3 karakter olmalı']
+  },
+  email: {
+    type: String,
+    required: [true, 'E-posta gerekli'],
+    unique: true,
+    lowercase: true,
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Geçerli bir e-posta adresi girin']
+  },
+  password: {
+    type: String,
+    required: [true, 'Şifre gerekli'],
+    minlength: [6, 'Şifre en az 6 karakter olmalı']
+  },
+  firstName: {
+    type: String,
+    required: [true, 'Ad gerekli'],
+    trim: true
+  },
+  lastName: {
+    type: String,
+    required: [true, 'Soyad gerekli'],
+    trim: true
+  },
+  phone: {
+    type: String,
+    required: [true, 'Telefon numarası gerekli'],
+    match: [/^[0-9]{10,11}$/, 'Geçerli bir telefon numarası girin']
+  },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user'
+  },
+  balance: {
+    type: Number,
+    default: 0,
+    min: [0, 'Bakiye negatif olamaz']
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  avatar: {
+    type: String,
+    default: null
+  },
+  lastLogin: {
+    type: Date,
+    default: null
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
+  },
+  twoFactorEnabled: {
+    type: Boolean,
+    default: false
   }
+}, {
+  timestamps: true
+});
 
-  static findById(id) {
-    const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
-    return stmt.get(id);
+// Şifre hashleme
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
   }
+});
 
-  static findByUsername(username) {
-    const stmt = db.prepare('SELECT * FROM users WHERE username = ?');
-    return stmt.get(username);
-  }
+// Şifre doğrulama
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
 
-  static findByEmail(email) {
-    const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
-    return stmt.get(email);
-  }
+// Tam ad
+userSchema.virtual('fullName').get(function() {
+  return `${this.firstName} ${this.lastName}`;
+});
 
-  static validatePassword(plainPassword, hashedPassword) {
-    return bcrypt.compareSync(plainPassword, hashedPassword);
-  }
+// JSON çıktısında şifreyi gizle
+userSchema.methods.toJSON = function() {
+  const userObject = this.toObject();
+  delete userObject.password;
+  return userObject;
+};
 
-  static updateBalance(userId, amount) {
-    const stmt = db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?');
-    return stmt.run(amount, userId);
-  }
-
-  static getBalance(userId) {
-    const stmt = db.prepare('SELECT balance FROM users WHERE id = ?');
-    const result = stmt.get(userId);
-    return result ? result.balance : 0;
-  }
-}
-
-module.exports = User;
+module.exports = mongoose.model('User', userSchema);

@@ -1,27 +1,55 @@
-const { db } = require('../database');
+const mongoose = require('mongoose');
 
-class Bank {
-  static findAll() {
-    const stmt = db.prepare('SELECT * FROM banks WHERE is_active = 1 ORDER BY name');
-    return stmt.all();
+const bankSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Banka adı gerekli'],
+    trim: true
+  },
+  code: {
+    type: String,
+    required: [true, 'Banka kodu gerekli'],
+    unique: true,
+    uppercase: true,
+    trim: true
+  },
+  swiftCode: {
+    type: String,
+    required: [true, 'SWIFT kodu gerekli'],
+    uppercase: true,
+    trim: true
+  },
+  logo: {
+    type: String,
+    default: null
+  },
+  color: {
+    type: String,
+    default: '#3B82F6'
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  supportedCurrencies: [{
+    type: String,
+    enum: ['TRY', 'USD', 'EUR', 'GBP'],
+    default: ['TRY']
+  }],
+  processingTime: {
+    type: String,
+    default: '1-2 İş Günü'
+  },
+  dailyLimit: {
+    type: Number,
+    default: 50000
+  },
+  monthlyLimit: {
+    type: Number,
+    default: 500000
   }
+}, {
+  timestamps: true
+});
 
-  static findById(id) {
-    const stmt = db.prepare('SELECT * FROM banks WHERE id = ?');
-    return stmt.get(id);
-  }
-
-  static create(bankData) {
-    const { name, code, logo_url } = bankData;
-    
-    const stmt = db.prepare(`
-      INSERT INTO banks (name, code, logo_url, created_at)
-      VALUES (?, ?, ?, datetime('now'))
-    `);
-    
-    const result = stmt.run(name, code, logo_url);
-    return this.findById(result.lastInsertRowid);
-  }
-}
-
-module.exports = Bank;
+module.exports = mongoose.model('Bank', bankSchema);
