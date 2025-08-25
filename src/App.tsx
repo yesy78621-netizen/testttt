@@ -1,34 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { User } from './types';
+import { apiService } from './services/api';
 import LoginPage from './components/auth/LoginPage';
 import Dashboard from './components/dashboard/Dashboard';
 import AdminPanel from './components/admin/AdminPanel';
-
-export type User = {
-  id: string;
-  username: string;
-  role: 'user' | 'admin';
-};
+import LoadingSpinner from './components/common/LoadingSpinner';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'admin'>('dashboard');
+  const [loading, setLoading] = useState(true);
 
-  const handleLogin = (username: string, role: 'user' | 'admin') => {
-    setCurrentUser({
-      id: Math.random().toString(36).substr(2, 9),
-      username,
-      role
-    });
-    setCurrentView(role === 'admin' ? 'admin' : 'dashboard');
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const response = await apiService.getCurrentUser();
+        setCurrentUser(response.user);
+        setCurrentView(response.user.role === 'admin' ? 'admin' : 'dashboard');
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      localStorage.removeItem('token');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async (username: string, password: string) => {
+    try {
+      const response = await apiService.login(username, password);
+      setCurrentUser(response.user);
+      setCurrentView(response.user.role === 'admin' ? 'admin' : 'dashboard');
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const handleRegister = async (username: string, email: string, password: string, role: string) => {
+    try {
+      const response = await apiService.register(username, email, password, role);
+      setCurrentUser(response.user);
+      setCurrentView(response.user.role === 'admin' ? 'admin' : 'dashboard');
+    } catch (error) {
+      throw error;
+    }
   };
 
   const handleLogout = () => {
+    apiService.logout();
     setCurrentUser(null);
     setCurrentView('dashboard');
   };
 
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
   if (!currentUser) {
-    return <LoginPage onLogin={handleLogin} />;
+    return <LoginPage onLogin={handleLogin} onRegister={handleRegister} />;
   }
 
   return (
